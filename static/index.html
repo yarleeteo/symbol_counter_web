@@ -28,6 +28,12 @@
   header p{ margin:2px 0 0; font-size:12.5px; color:var(--mute); }
 
   main{ max-width:1140px; margin:0 auto; padding:26px 24px 64px; }
+  .tabs{ display:flex; gap:8px; margin-bottom:18px; border-bottom:1px solid var(--line); }
+  .tabbtn{ background:transparent; color:var(--ink); border:0; border-radius:0;
+           padding:0 4px 13px; font-size:14px; font-weight:600; }
+  .tabbtn:hover{ background:transparent; color:var(--terra); }
+  .tabbtn.active{ color:var(--terra); box-shadow:0 2px 0 var(--terra); }
+  .window-only{ display:none; }
 
   .step{ background:var(--panel); border:1px solid var(--line);
          border-radius:var(--radius); padding:22px 24px; margin-bottom:18px; }
@@ -120,8 +126,13 @@
 </header>
 
 <main>
+  <nav class="tabs" aria-label="Detection mode">
+    <button type="button" class="tabbtn active" id="symbolTab">Symbol counter</button>
+    <button type="button" class="tabbtn" id="windowTab">Window detection</button>
+  </nav>
+
   <!-- Step 1: legend -->
-  <section class="step">
+  <section class="step symbol-only">
     <h2><span class="n">1 ·</span> Upload the legend</h2>
     <p class="hint">The app picks up the symbol types to look for.</p>
     <div class="row">
@@ -133,7 +144,7 @@
   </section>
 
   <!-- Step 2: layout -->
-  <section class="step">
+  <section class="step symbol-only">
     <h2><span class="n">2 ·</span> Upload the layout</h2>
     <p class="hint">It searches, maps, circles each type in its colour, and counts.</p>
     <div class="row">
@@ -143,9 +154,19 @@
     <div id="analyzeMsg" class="msg"></div>
   </section>
 
+  <section class="step window-only">
+    <h2><span class="n">1 ·</span> Upload the layout</h2>
+    <p class="hint">It detects window locations directly and marks each location with a dot.</p>
+    <div class="row">
+      <input id="windowFile" type="file" accept="application/pdf" />
+      <button id="windowAnalyzeBtn">Detect windows</button>
+    </div>
+    <div id="windowMsg" class="msg"></div>
+  </section>
+
   <!-- Step 3: results -->
   <section class="step" id="resultStep" style="display:none">
-    <h2><span class="n">3 ·</span> Result</h2>
+    <h2><span class="n" id="resultStepNo">3 ·</span> <span id="resultTitle">Result</span></h2>
     <div class="dlrow">
       <a class="dlbtn" id="overlayDownload" href="/api/download/overlay.pdf">↓ Marked-up overlay (PDF)</a>
       <a class="dlbtn alt" id="countsDownload" href="/api/download/counts.csv">↓ Counts (CSV)</a>
@@ -163,16 +184,16 @@
       </div>
       <div class="summary">
         <div class="hero">
-          <div class="eyebrow">Total fixtures</div>
+          <div class="eyebrow" id="totalLabel">Total fixtures</div>
           <div class="bignum" id="totalBig">&mdash;</div>
           <div class="herosub" id="typeCount"></div>
         </div>
-        <span class="eyebrow breakhead">Breakdown by type</span>
+        <span class="eyebrow breakhead" id="breakdownLabel">Breakdown by type</span>
         <table>
           <thead><tr><th>Type</th><th class="r">Qty</th><th class="r">Share</th></tr></thead>
           <tbody id="countBody"></tbody>
         </table>
-        <div class="teach">
+        <div class="teach" id="teachPanel">
           <button type="button" id="teachStart" class="dlbtn ghost">✎ Teach a new symbol</button>
           <div id="teachBox" style="display:none">
             <p class="muted" id="teachHint">Click an example of the symbol on the
@@ -200,6 +221,24 @@ const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
 const API_BASE = (window.API_BASE_URL || "").replace(/\/$/, "");
 const apiUrl = path => API_BASE + path;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+let activeMode = "symbols";
+
+function setMode(mode) {
+  activeMode = mode;
+  $("symbolTab").classList.toggle("active", mode === "symbols");
+  $("windowTab").classList.toggle("active", mode === "windows");
+  document.querySelectorAll(".symbol-only").forEach(el => {
+    el.style.display = mode === "symbols" ? "" : "none";
+  });
+  document.querySelectorAll(".window-only").forEach(el => {
+    el.style.display = mode === "windows" ? "block" : "none";
+  });
+  $("resultStep").style.display = "none";
+  if (teachMode) exitTeachMode();
+}
+
+$("symbolTab").onclick = () => setMode("symbols");
+$("windowTab").onclick = () => setMode("windows");
 
 $("legendBtn").onclick = async () => {
   const f = $("legendFile").files[0];
@@ -250,6 +289,39 @@ $("analyzeBtn").onclick = async () => {
     countsCsvUrl: apiUrl("/api/download/counts.csv"),
   }, false);
   $("analyzeMsg").textContent = "Done — verify the marks on the overlay.";
+};
+
+$("windowAnalyzeBtn").onclick = async () => {
+  const f = $("windowFile").files[0];
+  if (!f) { $("windowMsg").textContent = "Choose a layout PDF first."; return; }
+  $("windowAnalyzeBtn").disabled = true;
+  $("windowMsg").textContent = "Detecting windows…";
+  $("windowMsg").className = "msg";
+  const fd = new FormData(); fd.append("file", f);
+  const r = await fetch(apiUrl("/api/analyze-windows"), { method: "POST", body: fd });
+  $("windowAnalyzeBtn").disabled = false;
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    $("windowMsg").textContent = e.error || "Could not detect windows.";
+    $("windowMsg").className = "msg err";
+    return;
+  }
+  const data = await r.json();
+  renderResults({
+    counts: data.counts,
+    previewUrl: data.overlay,
+    overlayPdfUrl: apiUrl("/api/download/windows-overlay.pdf"),
+    countsCsvUrl: apiUrl("/api/download/windows.csv"),
+  }, false, {
+    mode: "windows",
+    resultStepNo: "2 ·",
+    title: "Window result",
+    totalLabel: "Total windows",
+    breakdownLabel: "Detected locations",
+    overlayLabel: "↓ Window overlay (PDF)",
+    csvLabel: "↓ Window locations (CSV)",
+  });
+  $("windowMsg").textContent = "Done — verify the dots on the overlay.";
 };
 
 async function analyzeOnline(file) {
@@ -306,17 +378,25 @@ async function analyzeOnline(file) {
   }
 }
 
-function renderResults(data, onlineMode) {
+function renderResults(data, onlineMode, opts = {}) {
+  const isWindowMode = opts.mode === "windows";
   $("overlayImg").src = data.previewUrl;
   window.lastOverlay = data.previewUrl;
   $("overlayDownload").href = data.overlayPdfUrl;
   $("countsDownload").href = data.countsCsvUrl;
+  $("overlayDownload").textContent = opts.overlayLabel || "↓ Marked-up overlay (PDF)";
+  $("countsDownload").textContent = opts.csvLabel || "↓ Counts (CSV)";
+  $("resultStepNo").textContent = opts.resultStepNo || "3 ·";
+  $("resultTitle").textContent = opts.title || "Result";
+  $("totalLabel").textContent = opts.totalLabel || "Total fixtures";
+  $("breakdownLabel").textContent = opts.breakdownLabel || "Breakdown by type";
   resetZoom();
   $("countBody").innerHTML = data.counts.map(c =>
     `<tr><td><span class="dot" style="background:${rgb(c.color)}"></span><span class="name">${c.type}</span></td><td class="num">${c.count}</td><td class="pct"></td></tr>`
   ).join("");
   recomputeTotals();
   $("resultStep").style.display = "block";
+  $("teachPanel").style.display = isWindowMode ? "none" : "block";
   $("teachStart").disabled = !!onlineMode;
   $("teachStart").textContent = onlineMode ? "Teach unavailable online" : "✎ Teach a new symbol";
 }
