@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vision Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#ECE8E1; --panel:#F4F1EB; --inset:#FBFAF7;
+    --ink:#26241F; --mute:#8C857A; --line:#DAD4C9;
+    --terra:#A23E2A; --terra-dk:#8a3422; --sage:#7E9A80; --sage-dk:#6b8a6d;
+    --radius:14px;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink);
+        font-family:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+        -webkit-font-smoothing:antialiased; }
+  .eyebrow{ font-size:11px; font-weight:600; letter-spacing:.13em;
+            text-transform:uppercase; color:var(--mute); }
+
+  header{ display:flex; align-items:center; gap:14px;
+          padding:22px 28px; border-bottom:1px solid var(--line); }
+  .logo{ width:32px; height:32px; flex:0 0 32px; object-fit:contain; display:block; }
+  header h1{ margin:0; font-size:18px; font-weight:700; letter-spacing:-.01em; }
+  header p{ margin:2px 0 0; font-size:12.5px; color:var(--mute); }
+
+  main{ max-width:1140px; margin:0 auto; padding:26px 24px 64px; }
+
+  .step{ background:var(--panel); border:1px solid var(--line);
+         border-radius:var(--radius); padding:22px 24px; margin-bottom:18px; }
+  .step h2{ margin:0 0 4px; font-size:16px; font-weight:600; letter-spacing:-.01em; }
+  .step h2 .n{ color:var(--terra); font-weight:700; margin-right:2px; }
+  .step .hint{ margin:0 0 16px; font-size:13px; color:var(--mute); }
+  .row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  input[type=file]{ font-size:13px; color:var(--mute); }
+
+  button{ background:var(--ink); color:var(--panel); border:0; border-radius:9px;
+          padding:9px 17px; font:inherit; font-size:14px; font-weight:500;
+          cursor:pointer; transition:background .15s; }
+  button:hover{ background:var(--terra); }
+  button:disabled{ opacity:.45; cursor:default; background:var(--ink); }
+  button.alt{ background:var(--sage); }
+  button.alt:hover{ background:var(--sage-dk); }
+
+  .dlrow{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:20px; }
+  .dlbtn{ display:inline-flex; align-items:center; gap:7px; text-decoration:none;
+          background:var(--ink); color:var(--panel); padding:9px 16px; border-radius:9px;
+          font-size:13.5px; font-weight:500; transition:background .15s; }
+  .dlbtn:hover{ background:var(--terra); }
+  .dlbtn.alt{ background:var(--sage); }
+  .dlbtn.alt:hover{ background:var(--sage-dk); }
+  .dlbtn.ghost{ background:transparent; color:var(--ink); border:1px solid var(--line); }
+  .dlbtn.ghost:hover{ background:#E4DFD6; color:var(--ink); }
+
+  .result{ display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start; }
+  .overlay{ flex:1 1 520px; min-width:320px; }
+  .overlay img{ display:block; width:100%; user-select:none; -webkit-user-drag:none; }
+  .zoomctrls{ display:flex; gap:6px; align-items:center; margin-bottom:10px; }
+  .zoomctrls button{ padding:5px 13px; background:transparent; color:var(--ink);
+                     border:1px solid var(--line); font-weight:600; }
+  .zoomctrls button:hover{ background:#E4DFD6; color:var(--ink); }
+  .zoomwrap{ overflow:auto; max-height:74vh; border:1px solid var(--line);
+             border-radius:10px; background:var(--inset); cursor:grab; }
+  .zoomwrap.grabbing{ cursor:grabbing; }
+  .zoomwrap.teaching{ outline:2.5px solid var(--terra); outline-offset:-2.5px; cursor:crosshair; }
+
+  .summary{ flex:0 1 350px; min-width:284px; }
+  .hero{ padding-bottom:18px; border-bottom:1px solid var(--line); }
+  .bignum{ font-size:54px; font-weight:700; line-height:1; letter-spacing:-.03em;
+           margin-top:8px; font-variant-numeric:tabular-nums; }
+  .herosub{ font-size:12.5px; color:var(--mute); margin-top:9px; }
+  .breakhead{ display:block; margin:20px 0 2px; }
+
+  table{ border-collapse:collapse; width:100%; }
+  th,td{ text-align:left; padding:10px 2px; border-bottom:1px solid var(--line); font-size:13.5px; }
+  th{ font-size:11px; font-weight:600; letter-spacing:.13em; text-transform:uppercase;
+      color:var(--mute); padding-bottom:8px; }
+  th.r,td.num,td.pct{ text-align:right; }
+  td.num{ font-variant-numeric:tabular-nums; font-weight:700; width:52px; }
+  td.pct{ font-variant-numeric:tabular-nums; color:var(--mute); width:58px; font-size:12.5px; }
+  .dot{ display:inline-block; width:9px; height:9px; border-radius:50%;
+        vertical-align:middle; margin-right:11px; }
+  .name{ vertical-align:middle; }
+
+  .teach{ margin-top:20px; border-top:1px solid var(--line); padding-top:16px; }
+  .teachrow{ display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+  input[type=text]{ padding:8px 10px; border:1px solid var(--line); border-radius:8px;
+                    background:var(--inset); font:inherit; font-size:13px; color:var(--ink); }
+  .teachrow input{ flex:1 1 140px; }
+
+  .lrow{ display:flex; align-items:center; gap:14px; padding:9px 11px;
+         border:1px solid var(--line); border-radius:10px; margin-top:8px; background:var(--inset); }
+  .lrow img.sym{ height:42px; width:72px; object-fit:contain; flex:0 0 72px;
+                 border:1px solid var(--line); border-radius:5px; background:#fff; }
+  .lrow img.desc{ max-height:68px; max-width:430px; height:auto; width:auto; object-fit:contain; }
+  .lrow input{ margin-left:auto; flex:0 0 190px; }
+  .lrow img.sym{ cursor:pointer; transition:outline .12s; }
+  .lrow img.sym:hover{ outline:2px solid var(--terra); outline-offset:1px; }
+  .findbtn{ flex:0 0 auto; background:transparent; color:var(--ink);
+            border:1px solid var(--line); border-radius:8px; padding:8px 12px;
+            font:inherit; font-size:12.5px; font-weight:500; cursor:pointer; transition:background .15s; }
+  .findbtn:hover{ background:#E4DFD6; }
+  #legendRows{ margin-top:12px; max-height:460px; overflow:auto; padding-right:4px; }
+
+  .msg{ font-size:13px; color:var(--mute); margin-top:12px; }
+  .err{ color:var(--terra); }
+  .muted{ color:var(--mute); font-size:12px; margin-top:6px; }
+</style>
+</head>
+<body>
+<header>
+  <img class="logo" src="logo.png" alt="Vision Studio logo">
+  <div>
+    <h1>Vision Studio</h1>
+    <p>Quantity take-off &middot; structural, electrical, building &amp; landscape</p>
+  </div>
+</header>
+
+<main>
+  <!-- Step 1: legend -->
+  <section class="step">
+    <h2><span class="n">1 ·</span> Upload the legend</h2>
+    <p class="hint">The app picks up the symbol types to look for.</p>
+    <div class="row">
+      <input id="legendFile" type="file" accept="application/pdf,image/*" />
+      <button id="legendBtn" class="alt">Read legend</button>
+    </div>
+    <div id="legendRows"></div>
+    <div id="legendMsg" class="muted"></div>
+  </section>
+
+  <!-- Step 2: layout -->
+  <section class="step">
+    <h2><span class="n">2 ·</span> Upload the layout</h2>
+    <p class="hint">It searches, maps, circles each type in its colour, and counts.</p>
+    <div class="row">
+      <input id="layoutFile" type="file" accept="application/pdf" />
+      <button id="analyzeBtn">Analyse &amp; count</button>
+    </div>
+    <div id="analyzeMsg" class="msg"></div>
+  </section>
+
+  <!-- Step 3: results -->
+  <section class="step" id="resultStep" style="display:none">
+    <h2><span class="n">3 ·</span> Result</h2>
+    <div class="dlrow">
+      <a class="dlbtn" id="overlayDownload" href="/api/download/overlay.pdf">↓ Marked-up overlay (PDF)</a>
+      <a class="dlbtn alt" id="countsDownload" href="/api/download/counts.csv">↓ Counts (CSV)</a>
+      <span class="muted">CSV opens directly in Excel</span>
+    </div>
+    <div class="result">
+      <div class="overlay">
+        <div class="zoomctrls">
+          <button type="button" id="zoomOut">&minus;</button>
+          <button type="button" id="zoomReset">Reset</button>
+          <button type="button" id="zoomIn">+</button>
+          <span class="muted" style="margin-left:8px">scroll to zoom · drag to pan</span>
+        </div>
+        <div class="zoomwrap" id="zoomwrap"><img id="overlayImg" alt="overlay" /></div>
+      </div>
+      <div class="summary">
+        <div class="hero">
+          <div class="eyebrow">Total fixtures</div>
+          <div class="bignum" id="totalBig">&mdash;</div>
+          <div class="herosub" id="typeCount"></div>
+        </div>
+        <span class="eyebrow breakhead">Breakdown by type</span>
+        <table>
+          <thead><tr><th>Type</th><th class="r">Qty</th><th class="r">Share</th></tr></thead>
+          <tbody id="countBody"></tbody>
+        </table>
+        <div class="teach">
+          <button type="button" id="teachStart" class="dlbtn ghost">✎ Teach a new symbol</button>
+          <div id="teachBox" style="display:none">
+            <p class="muted" id="teachHint">Click an example of the symbol on the
+              drawing. Click 2&ndash;3 for best results. Works best for distinctive
+              symbols (sockets, fans, equipment); dense repeated fixtures are less reliable.</p>
+            <div class="muted">Examples clicked: <b id="teachN">0</b>
+              &nbsp;·&nbsp; Found: <b id="teachFound">&mdash;</b></div>
+            <div class="teachrow">
+              <input type="text" id="teachName" placeholder="name this symbol" />
+              <button type="button" id="teachAdd" class="dlbtn">Add to counts</button>
+              <button type="button" id="teachClear" class="dlbtn ghost">Clear</button>
+              <button type="button" id="teachCancel" class="dlbtn ghost">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="config.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
+const API_BASE = (window.API_BASE_URL || "").replace(/\/$/, "");
+const apiUrl = path => API_BASE + path;
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+$("legendBtn").onclick = async () => {
+  const f = $("legendFile").files[0];
+  if (!f) { $("legendMsg").textContent = "Choose a legend file first."; return; }
+  $("legendMsg").textContent = "Reading your legend…";
+  $("legendRows").innerHTML = "";
+  const fd = new FormData(); fd.append("file", f);
+  const r = await fetch(apiUrl("/api/legend"), { method: "POST", body: fd });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    $("legendMsg").textContent = e.error || "Could not read the legend.";
+    return;
+  }
+  const data = await r.json();
+  $("legendRows").innerHTML = data.rows.map((row, i) => `
+    <div class="lrow">
+      <img class="sym"  src="${row.symbol_png}" alt="symbol ${i + 1}" title="Tap to find this on the layout" onclick="startTeachFromLegend(this)">
+      <img class="desc" src="${row.description_png}" alt="description ${i + 1}">
+      <input type="text" placeholder="name this type (optional)" />
+      <button type="button" class="findbtn" onclick="startTeachFromLegend(this)">⌖ Find on layout</button>
+    </div>`).join("");
+  $("legendMsg").textContent =
+    `Found ${data.rows.length} rows in your legend. ` + (data.note || "");
+};
+
+$("analyzeBtn").onclick = async () => {
+  const f = $("layoutFile").files[0];
+  if (!f) { $("analyzeMsg").textContent = "Choose a layout PDF first."; return; }
+  if (API_BASE) {
+    await analyzeOnline(f);
+    return;
+  }
+  $("analyzeMsg").textContent = "Analysing… (large sheets take a few seconds)";
+  $("analyzeMsg").className = "msg";
+  const fd = new FormData(); fd.append("file", f);
+  const r = await fetch(apiUrl("/api/analyze"), { method: "POST", body: fd });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    $("analyzeMsg").textContent = e.error || "Something went wrong.";
+    $("analyzeMsg").className = "msg err";
+    return;
+  }
+  const data = await r.json();
+  renderResults({
+    counts: data.counts,
+    previewUrl: data.overlay,
+    overlayPdfUrl: apiUrl("/api/download/overlay.pdf"),
+    countsCsvUrl: apiUrl("/api/download/counts.csv"),
+  }, false);
+  $("analyzeMsg").textContent = "Done — verify the marks on the overlay.";
+};
+
+async function analyzeOnline(file) {
+  try {
+    $("analyzeBtn").disabled = true;
+    $("analyzeMsg").textContent = "Creating upload link…";
+    $("analyzeMsg").className = "msg";
+    const create = await fetch(apiUrl("/api/jobs"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: file.name,
+        contentType: "application/pdf",
+        size: file.size,
+      }),
+    });
+    const job = await create.json().catch(() => ({}));
+    if (!create.ok) throw new Error(job.error || "Could not create the job.");
+
+    $("analyzeMsg").textContent = "Uploading PDF…";
+    const upload = await fetch(job.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/pdf" },
+      body: file,
+    });
+    if (!upload.ok) throw new Error("Upload to S3 failed.");
+
+    $("analyzeMsg").textContent = "Processing…";
+    const start = await fetch(apiUrl(`/api/jobs/${job.jobId}/start`), { method: "POST" });
+    if (!start.ok) {
+      const e = await start.json().catch(() => ({}));
+      throw new Error(e.error || "Could not start processing.");
+    }
+
+    for (let i = 0; i < 120; i++) {
+      await sleep(i < 3 ? 1000 : 3000);
+      const poll = await fetch(apiUrl(`/api/jobs/${job.jobId}`));
+      const status = await poll.json().catch(() => ({}));
+      if (!poll.ok) throw new Error(status.error || "Could not read job status.");
+      if (status.status === "failed") throw new Error(status.error || "Processing failed.");
+      if (status.status === "done") {
+        renderResults(status, true);
+        $("analyzeMsg").textContent = "Done — verify the marks on the overlay.";
+        return;
+      }
+      $("analyzeMsg").textContent = `Processing… (${status.status || "queued"})`;
+    }
+    throw new Error("Timed out waiting for the result.");
+  } catch (err) {
+    $("analyzeMsg").textContent = err.message || "Something went wrong.";
+    $("analyzeMsg").className = "msg err";
+  } finally {
+    $("analyzeBtn").disabled = false;
+  }
+}
+
+function renderResults(data, onlineMode) {
+  $("overlayImg").src = data.previewUrl;
+  window.lastOverlay = data.previewUrl;
+  $("overlayDownload").href = data.overlayPdfUrl;
+  $("countsDownload").href = data.countsCsvUrl;
+  resetZoom();
+  $("countBody").innerHTML = data.counts.map(c =>
+    `<tr><td><span class="dot" style="background:${rgb(c.color)}"></span><span class="name">${c.type}</span></td><td class="num">${c.count}</td><td class="pct"></td></tr>`
+  ).join("");
+  recomputeTotals();
+  $("resultStep").style.display = "block";
+  $("teachStart").disabled = !!onlineMode;
+  $("teachStart").textContent = onlineMode ? "Teach unavailable online" : "✎ Teach a new symbol";
+}
+
+// recompute the hero total and each row's share of total
+function recomputeTotals() {
+  const rows = [...$("countBody").querySelectorAll("tr")];
+  let total = 0; const nums = [];
+  rows.forEach(tr => { const n = parseInt(tr.querySelector(".num").textContent) || 0; nums.push(n); total += n; });
+  rows.forEach((tr, i) => { const p = tr.querySelector(".pct"); if (p) p.textContent = (total ? (100 * nums[i] / total).toFixed(1) : "0.0") + "%"; });
+  $("totalBig").textContent = total;
+  $("typeCount").textContent = "across " + rows.length + " type" + (rows.length === 1 ? "" : "s");
+}
+
+// ---- zoom & pan for the result overlay ----
+let zoom = 1;
+function applyZoom() { $("overlayImg").style.width = (zoom * 100) + "%"; }
+function resetZoom() {
+  const w = $("zoomwrap");
+  zoom = 1; applyZoom(); w.scrollLeft = 0; w.scrollTop = 0;
+}
+function setZoom(z, cx, cy) {
+  const w = $("zoomwrap");
+  const prev = zoom;
+  zoom = Math.max(1, Math.min(24, z));
+  const rect = w.getBoundingClientRect();
+  const px = (cx == null ? rect.width / 2 + rect.left : cx);
+  const py = (cy == null ? rect.height / 2 + rect.top : cy);
+  const x = px - rect.left + w.scrollLeft;
+  const y = py - rect.top + w.scrollTop;
+  const ratio = zoom / prev;
+  applyZoom();
+  w.scrollLeft = x * ratio - (px - rect.left);
+  w.scrollTop  = y * ratio - (py - rect.top);
+}
+(function initZoom() {
+  $("zoomIn").onclick = () => setZoom(zoom * 1.3);
+  $("zoomOut").onclick = () => setZoom(zoom / 1.3);
+  $("zoomReset").onclick = resetZoom;
+  const w = $("zoomwrap");
+  w.addEventListener("wheel", e => {
+    e.preventDefault();
+    setZoom(zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX, e.clientY);
+  }, { passive: false });
+  let drag = false, sx, sy, sl, st;
+  w.addEventListener("mousedown", e => {
+    drag = true; window.__dragMoved = false; w.classList.add("grabbing");
+    sx = e.clientX; sy = e.clientY; sl = w.scrollLeft; st = w.scrollTop;
+    e.preventDefault();
+  });
+  window.addEventListener("mousemove", e => {
+    if (!drag) return;
+    if (Math.abs(e.clientX - sx) > 4 || Math.abs(e.clientY - sy) > 4) window.__dragMoved = true;
+    w.scrollLeft = sl - (e.clientX - sx);
+    w.scrollTop  = st - (e.clientY - sy);
+  });
+  window.addEventListener("mouseup", () => { drag = false; w.classList.remove("grabbing"); });
+})();
+
+// ---- teach-by-example ----
+let teachMode = false, teachClicks = [];
+function enterTeachMode(presetName) {
+  teachMode = true; teachClicks = [];
+  $("teachBox").style.display = "block";
+  $("teachStart").style.display = "none";
+  $("zoomwrap").classList.add("teaching");
+  $("teachN").textContent = "0"; $("teachFound").textContent = "—";
+  if (presetName) $("teachName").value = presetName;
+  $("teachHint").textContent = presetName
+    ? `Now click an example of “${presetName}” on the drawing — 2–3 for best results. (Text-based symbols like MS may not match by shape; those are the AI step.)`
+    : "Click an example of the symbol on the drawing. Click 2–3 for best results. Works best for distinctive shapes; dense repeated fixtures are less reliable.";
+}
+function exitTeachMode() {
+  // leave teach mode entirely: drop example markers, close the panel,
+  // reset fields — without adding anything to the counts.
+  teachMode = false; teachClicks = [];
+  if (window.lastOverlay) $("overlayImg").src = window.lastOverlay;
+  $("zoomwrap").classList.remove("teaching");
+  $("teachBox").style.display = "none";
+  $("teachStart").style.display = "inline-block";
+  $("teachName").value = "";
+  $("teachN").textContent = "0"; $("teachFound").textContent = "—";
+}
+function startTeachFromLegend(el) {
+  if (API_BASE) {
+    $("legendMsg").textContent =
+      "Teach-by-example is only available in the local version for now.";
+    $("legendMsg").scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+  if (!window.lastOverlay) {
+    $("legendMsg").textContent =
+      "First analyse a layout in step 2 — then tap a symbol to find it on the drawing.";
+    $("legendMsg").scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+  const row = el.closest(".lrow");
+  const name = row ? row.querySelector("input").value.trim() : "";
+  $("resultStep").scrollIntoView({ behavior: "smooth", block: "start" });
+  enterTeachMode(name);
+}
+function imgToPdf(e) {
+  const img = $("overlayImg"), rect = img.getBoundingClientRect();
+  const fx = (e.clientX - rect.left) / rect.width;
+  const fy = (e.clientY - rect.top) / rect.height;
+  return [fx * img.naturalWidth * 72 / 200, fy * img.naturalHeight * 72 / 200];
+}
+async function runTeach() {
+  if (!teachClicks.length) return;
+  $("teachFound").textContent = "…";
+  const r = await fetch(apiUrl("/api/teach"), {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ clicks: teachClicks, radius: 8 })
+  });
+  if (!r.ok) { $("teachFound").textContent = "error"; return; }
+  const d = await r.json();
+  $("overlayImg").src = d.overlay;
+  $("teachFound").textContent = d.count;
+}
+(function initTeach() {
+  $("teachStart").onclick = () => enterTeachMode("");
+  $("teachClear").onclick = () => {
+    teachClicks = []; $("teachN").textContent = "0"; $("teachFound").textContent = "—";
+    if (window.lastOverlay) $("overlayImg").src = window.lastOverlay;
+  };
+  $("teachCancel").onclick = () => exitTeachMode();
+  $("teachAdd").onclick = () => {
+    const cnt = $("teachFound").textContent;
+    if (cnt === "—" || cnt === "…" || cnt === "error") return;
+    const name = ($("teachName").value.trim() || "New symbol");
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><span class="dot" style="background:rgb(0,179,51)"></span><span class="name">${name}</span></td><td class="num">${cnt}</td><td class="pct"></td>`;
+    $("countBody").appendChild(tr);
+    recomputeTotals();
+    exitTeachMode();
+  };
+  $("overlayImg").addEventListener("click", e => {
+    if (!teachMode || window.__dragMoved) return;
+    teachClicks.push(imgToPdf(e));
+    $("teachN").textContent = teachClicks.length;
+    runTeach();
+  });
+})();
+</script>
+</body>
+</html>

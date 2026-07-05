@@ -1,0 +1,59 @@
+START HERE  (macOS)
+===================
+
+This app runs on YOUR Mac. Nothing is sent to the internet. "Web app" just
+means you use it in your browser, while the program runs on your computer.
+
+You need two things: Python (once), then start the app.
+
+------------------------------------------------------------
+STEP 1 — Do you have Python?
+------------------------------------------------------------
+Open Terminal (press Command+Space, type "Terminal", Enter) and type:
+
+    python3 --version
+
+  - If it shows "Python 3.x.x"  -> you're good.
+  - If it says "command not found" -> install Python:
+        Go to  https://www.python.org/downloads/
+        Click the big yellow "Download Python" button.
+        Open the downloaded file and click through the installer.
+        Then CLOSE and REOPEN Terminal.
+
+------------------------------------------------------------
+STEP 2 — Start the app (the easy way)
+------------------------------------------------------------
+Double-click the file:  start_mac.command
+
+  - The first time, macOS may block it. If so:
+        Right-click start_mac.command  ->  Open  ->  click "Open".
+  - A black window appears and sets things up. Leave it open.
+
+When it says "Ready!", open your browser and go to:
+
+    http://localhost:8000
+
+------------------------------------------------------------
+STEP 2 (alternative) — Start the app by typing
+------------------------------------------------------------
+If the double-click doesn't work, in Terminal type:
+
+    cd
+    (then a space, then drag this folder into the window, then Enter)
+
+    python3 -m pip install -r requirements.txt        (first time only)
+    python3 -m uvicorn app:app --port 8000
+
+Then open  http://localhost:8000  in your browser.
+
+------------------------------------------------------------
+TO STOP
+------------------------------------------------------------
+Close the black window, or click it and press Control + C.
+
+------------------------------------------------------------
+HOW TO USE
+------------------------------------------------------------
+1. Upload a legend file, click "Read legend".
+2. Upload a layout PDF (a CAD/vector one), click "Analyse & count".
+3. You'll see every fixture circled in colour, with a count per type.
