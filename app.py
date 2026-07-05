@@ -30,6 +30,7 @@ from vector_engine import (
     load_first_page, is_vector, count_fixtures,
     CATEGORY_LABELS, CATEGORY_COLORS,
 )
+from window_engine import detect_windows, WINDOW_KEY, WINDOW_LABEL, WINDOW_COLOR
 from legend_reader import read_legend
 import teach
 
@@ -49,6 +50,7 @@ app.add_middleware(
 
 # Holds the most recent analysis so the Download buttons can fetch it.
 _LAST = {}
+_LAST_WINDOW = {}
 
 
 def _color255(key):
@@ -68,6 +70,13 @@ def draw_markers(page, results):
                 page.draw_circle((it[0], it[1]), 5, color=color, width=1)
 
 
+def draw_window_markers(page, results):
+    """Draw filled dots for every detected window location."""
+    for point in results.get(WINDOW_KEY, []):
+        page.draw_circle(point, 4.5, color=(1, 1, 1), fill=(1, 1, 1), width=0.6)
+        page.draw_circle(point, 3.2, color=WINDOW_COLOR, fill=WINDOW_COLOR, width=0.6)
+
+
 def page_to_png(page, dpi=200):
     pix = page.get_pixmap(matrix=fitz.Matrix(dpi / 72, dpi / 72))
     return pix.tobytes("png")
@@ -83,6 +92,17 @@ def build_csv(counts):
         w.writerow([c["type"], c["count"]])
         total += c["count"]
     w.writerow(["Total", total])
+    return buf.getvalue()
+
+
+def build_window_csv(points):
+    buf = io.StringIO()
+    import csv as _csv
+    w = _csv.writer(buf)
+    w.writerow(["No", "X", "Y"])
+    for i, (x, y) in enumerate(points, 1):
+        w.writerow([i, round(x, 2), round(y, 2)])
+    w.writerow(["Total", len(points), ""])
     return buf.getvalue()
 
 
@@ -279,6 +299,42 @@ async def analyze(file: UploadFile = File(...)):
         os.unlink(tmp.name)
 
 
+@app.post("/api/analyze-windows")
+async def analyze_windows(file: UploadFile = File(...)):
+    """Detect window locations on a layout PDF and return a dot overlay."""
+    data = await file.read()
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    tmp.write(data)
+    tmp.close()
+    try:
+        doc, page = load_first_page(tmp.name)
+        results = detect_windows(page)
+        points = results.get(WINDOW_KEY, [])
+        counts = [{
+            "key": WINDOW_KEY,
+            "type": WINDOW_LABEL,
+            "color": [int(round(c * 255)) for c in WINDOW_COLOR],
+            "count": len(points),
+        }]
+
+        draw_window_markers(page, results)
+        overlay = "data:image/png;base64," + base64.b64encode(page_to_png(page)).decode()
+
+        out_pdf = tmp.name + "-windows.pdf"
+        doc.save(out_pdf)
+        with open(out_pdf, "rb") as f:
+            _LAST_WINDOW["overlay_pdf"] = f.read()
+        os.unlink(out_pdf)
+        _LAST_WINDOW["csv"] = build_window_csv(points)
+        _LAST_WINDOW["name"] = os.path.splitext(file.filename or "layout")[0]
+
+        return {"counts": counts, "overlay": overlay, "downloads": True}
+    except Exception as e:
+        return JSONResponse({"error": f"Could not detect windows: {e}"}, status_code=400)
+    finally:
+        os.unlink(tmp.name)
+
+
 @app.get("/api/download/overlay.pdf")
 def download_overlay():
     if "overlay_pdf" not in _LAST:
@@ -297,6 +353,26 @@ def download_csv():
     return Response(
         _LAST["csv"], media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{name}_counts.csv"'})
+
+
+@app.get("/api/download/windows-overlay.pdf")
+def download_windows_overlay():
+    if "overlay_pdf" not in _LAST_WINDOW:
+        return JSONResponse({"error": "Run window detection first."}, status_code=404)
+    name = _LAST_WINDOW.get("name", "layout")
+    return Response(
+        _LAST_WINDOW["overlay_pdf"], media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{name}_windows_marked.pdf"'})
+
+
+@app.get("/api/download/windows.csv")
+def download_windows_csv():
+    if "csv" not in _LAST_WINDOW:
+        return JSONResponse({"error": "Run window detection first."}, status_code=404)
+    name = _LAST_WINDOW.get("name", "layout")
+    return Response(
+        _LAST_WINDOW["csv"], media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{name}_windows.csv"'})
 
 
 @app.post("/api/teach")
