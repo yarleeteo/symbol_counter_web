@@ -30,7 +30,7 @@ from vector_engine import (
     load_first_page, is_vector, count_fixtures,
     CATEGORY_LABELS, CATEGORY_COLORS,
 )
-from window_engine import detect_windows, WINDOW_KEY, WINDOW_LABEL, WINDOW_COLOR
+from window_engine import detect_windows, WINDOW_KEY, WINDOW_COLOR, WINDOW_DIRECTION_COLORS
 from legend_reader import read_legend
 import teach
 
@@ -73,8 +73,9 @@ def draw_markers(page, results):
 def draw_window_markers(page, results):
     """Draw filled dots for every detected window location."""
     for point in results.get(WINDOW_KEY, []):
-        page.draw_circle(point, 4.5, color=(1, 1, 1), fill=(1, 1, 1), width=0.6)
-        page.draw_circle(point, 3.2, color=WINDOW_COLOR, fill=WINDOW_COLOR, width=0.6)
+        xy = (point["x"], point["y"]) if isinstance(point, dict) else point
+        page.draw_circle(xy, 4.5, color=(1, 1, 1), fill=(1, 1, 1), width=0.6)
+        page.draw_circle(xy, 3.2, color=WINDOW_COLOR, fill=WINDOW_COLOR, width=0.6)
 
 
 def page_to_png(page, dpi=200):
@@ -95,14 +96,28 @@ def build_csv(counts):
     return buf.getvalue()
 
 
+def _window_direction_counts(points):
+    order = ["North", "East", "West", "South", "Unassigned"]
+    grouped = {direction: 0 for direction in order}
+    for point in points:
+        direction = point.get("direction", "Unassigned") if isinstance(point, dict) else "Unassigned"
+        if direction == "Not Included":
+            continue
+        grouped.setdefault(direction, 0)
+        grouped[direction] += 1
+    return [(direction, grouped[direction]) for direction in order if grouped.get(direction)]
+
+
 def build_window_csv(points):
     buf = io.StringIO()
     import csv as _csv
     w = _csv.writer(buf)
-    w.writerow(["No", "X", "Y"])
-    for i, (x, y) in enumerate(points, 1):
-        w.writerow([i, round(x, 2), round(y, 2)])
-    w.writerow(["Total", len(points), ""])
+    w.writerow(["Direction", "Count"])
+    total = 0
+    for direction, count in _window_direction_counts(points):
+        w.writerow([direction, count])
+        total += count
+    w.writerow(["Total", total])
     return buf.getvalue()
 
 
@@ -310,12 +325,15 @@ async def analyze_windows(file: UploadFile = File(...)):
         doc, page = load_first_page(tmp.name)
         results = detect_windows(page)
         points = results.get(WINDOW_KEY, [])
-        counts = [{
-            "key": WINDOW_KEY,
-            "type": WINDOW_LABEL,
-            "color": [int(round(c * 255)) for c in WINDOW_COLOR],
-            "count": len(points),
-        }]
+        counts = []
+        for direction, count in _window_direction_counts(points):
+            color = WINDOW_DIRECTION_COLORS.get(direction, WINDOW_COLOR)
+            counts.append({
+                "key": f"{WINDOW_KEY}:{direction.lower().replace(' ', '-')}",
+                "type": direction,
+                "color": [int(round(c * 255)) for c in color],
+                "count": count,
+            })
 
         draw_window_markers(page, results)
         overlay = "data:image/png;base64," + base64.b64encode(page_to_png(page)).decode()

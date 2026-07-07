@@ -24,11 +24,29 @@ from PIL import Image
 WINDOW_KEY = "window"
 WINDOW_LABEL = "Windows"
 WINDOW_COLOR = (0.95, 0.18, 0.08)
+WINDOW_DIRECTION_COLORS = {
+    "North": (0.0, 0.2, 0.8),
+    "East": (1.0, 1.0, 0.0),
+    "West": (0.4, 0.0, 0.8),
+    "South": (0.0, 0.6, 0.0),
+}
+_LEGEND_COLORS = {
+    **WINDOW_DIRECTION_COLORS,
+    "Not Included": (1.0, 0.0, 0.0),
+}
 
 _DPI = 200
 
 
+def _xy(point):
+    if isinstance(point, dict):
+        return point["x"], point["y"]
+    return point
+
+
 def _dist2(a, b):
+    a = _xy(a)
+    b = _xy(b)
     return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
 
 
@@ -36,10 +54,22 @@ def _is_cyan(color):
     return color and 0.35 < color[0] < 0.65 and color[1] > 0.8 and color[2] > 0.8
 
 
-def _is_window_overlay_color(color):
+def _direction_for_color(color):
     if not color or _is_cyan(color):
-        return False
-    return max(color) > 0.4 and max(color) - min(color) > 0.15
+        return None
+    best = None
+    best_d2 = None
+    for direction, palette in _LEGEND_COLORS.items():
+        d2 = sum((color[i] - palette[i]) ** 2 for i in range(3))
+        if best is None or d2 < best_d2:
+            best = direction
+            best_d2 = d2
+    return best if best_d2 is not None and best_d2 <= 0.08 else None
+
+
+def _is_window_overlay_color(color):
+    direction = _direction_for_color(color)
+    return direction is not None and direction != "Not Included"
 
 
 def _colored_segments(page):
@@ -49,7 +79,8 @@ def _colored_segments(page):
     supplemental_groups = []
     for drawing in page.get_drawings():
         color = drawing.get("color") or drawing.get("fill")
-        if not _is_window_overlay_color(color):
+        direction = _direction_for_color(color)
+        if direction is None:
             continue
 
         rect = drawing["rect"]
@@ -61,20 +92,22 @@ def _colored_segments(page):
             x1, y1 = item[2].x, item[2].y
             length = math.hypot(x1 - x0, y1 - y0)
             if length > 5:
-                lines.append((x0, y0, x1, y1, length))
+                lines.append((x0, y0, x1, y1, length, direction))
 
         if not lines:
             continue
         segments.extend(lines)
+        if direction == "Not Included":
+            continue
         midpoints = []
         for line in lines:
             if line[4] < 12:
                 continue
-            midpoint = ((line[0] + line[2]) / 2, (line[1] + line[3]) / 2)
+            midpoint = {"x": (line[0] + line[2]) / 2, "y": (line[1] + line[3]) / 2, "direction": direction}
             if all(_dist2(midpoint, old) > 8 * 8 for old in midpoints):
                 midpoints.append(midpoint)
         longest = max(lines, key=lambda line: line[4])
-        groups.append(((longest[0] + longest[2]) / 2, (longest[1] + longest[3]) / 2))
+        groups.append({"x": (longest[0] + longest[2]) / 2, "y": (longest[1] + longest[3]) / 2, "direction": direction})
         if 1 < len(midpoints) <= 3:
             supplemental_groups.extend(midpoints)
 
@@ -85,7 +118,7 @@ def _plan_bbox(page):
     rects = []
     for drawing in page.get_drawings():
         color = drawing.get("color") or drawing.get("fill")
-        if not _is_window_overlay_color(color):
+        if _direction_for_color(color) is None:
             continue
         rect = drawing["rect"]
         if rect.width > 1 or rect.height > 1:
@@ -101,8 +134,8 @@ def _plan_bbox(page):
 
 
 def _nearest_point_on_segment(point, segment):
-    px, py = point
-    x0, y0, x1, y1, _length = segment
+    px, py = _xy(point)
+    x0, y0, x1, y1, _length = segment[:5]
     dx, dy = x1 - x0, y1 - y0
     denom = dx * dx + dy * dy
     if denom <= 0:
@@ -378,17 +411,21 @@ def _raster_label_text(page, segments):
         projected, segment, distance = _nearest_projection(point, segments)
         if not segment or distance is None:
             continue
-        x0, y0, x1, y1, _length = segment
+        x0, y0, x1, y1, _length = segment[:5]
         vertical = abs(y1 - y0) > abs(x1 - x0)
         lower_right_horizontal = not vertical and projected[1] > 330
         lower_plan_horizontal = not vertical and projected[1] > 280 and distance <= 30
         interior_label = 180 <= point[0] <= 340 and 190 <= point[1] <= 260 and distance <= 75
         compact_label = aspect <= 4.0
         wide_vertical_label = vertical and aspect <= 6.2
-        right_side_label = point[0] > 450 and (
+        near_right_edge = projected[0] >= bbox.x1 - 18
+        right_side_label = point[0] > 450 and near_right_edge and (
             compact_label and (vertical or lower_right_horizontal) or wide_vertical_label
         )
         if right_side_label or lower_plan_horizontal or interior_label:
+            near_lower_endpoint = vertical and abs(projected[1] - max(y0, y1)) <= 24
+            if near_lower_endpoint and point[1] > 330:
+                continue
             if interior_label and not (vertical or lower_plan_horizontal):
                 points.append(point)
                 continue
@@ -427,7 +464,7 @@ def _interior_label_points(page, segments):
         projected, segment, distance = _nearest_projection(point, segments)
         if not segment or distance is None:
             continue
-        x0, y0, x1, y1, _length = segment
+        x0, y0, x1, y1, _length = segment[:5]
         horizontal = abs(x1 - x0) >= abs(y1 - y0)
         inside_plan = bbox.x0 + 90 <= point[0] <= bbox.x1 - 90 and bbox.y0 + 45 <= point[1] <= bbox.y1 - 45
         central_callout = 1.45 <= bw / bh <= 2.4 and 190 <= point[1] <= 255 and 180 <= point[0] <= 340
@@ -461,7 +498,7 @@ def _lower_fragment_label_points(page, segments):
         projected, segment, distance = _nearest_projection(point, segments)
         if not segment or distance is None:
             continue
-        x0, y0, x1, y1, length = segment
+        x0, y0, x1, y1, length = segment[:5]
         horizontal = abs(x1 - x0) >= abs(y1 - y0)
         above_lower_edge = horizontal and projected[1] > bbox.y1 - 40 and 14 <= distance <= 48
         near_lower_label_band = bbox.x0 + 40 <= point[0] <= bbox.x0 + 250 and point[1] < projected[1]
@@ -480,6 +517,30 @@ def _dedupe(points, radius=6):
     return kept
 
 
+def _window_record(point, segments):
+    x, y = _xy(point)
+    if isinstance(point, dict) and point.get("direction"):
+        direction = point["direction"]
+    else:
+        _projected, segment, _distance = _nearest_projection((x, y), segments)
+        direction = segment[5] if segment and len(segment) > 5 else "Unassigned"
+    return {"x": x, "y": y, "direction": direction}
+
+
+def _dedupe_window_records(records):
+    kept = []
+    for record in records:
+        aligned_duplicate = any(
+            record["direction"] == old["direction"]
+            and abs(record["x"] - old["x"]) <= 8
+            and abs(record["y"] - old["y"]) <= 32
+            for old in kept
+        )
+        if not aligned_duplicate:
+            kept.append(record)
+    return kept
+
+
 def detect_windows(page):
     """Return a dict compatible with the existing overlay/count pipeline."""
     segments, colored_points, supplemental_colored_points = _colored_segments(page)
@@ -487,7 +548,11 @@ def detect_windows(page):
     text_points = _raster_label_text(page, segments)
     rescue_points = _interior_label_points(page, segments) + _lower_fragment_label_points(page, segments)
 
-    if 10 <= len(colored_points) <= 16 and len(callout_points) < len(colored_points):
+    if 5 <= len(colored_points) <= 7 and len(callout_points) >= len(colored_points):
+        # Compact terrace sheets have reliable direction overlay groups, while
+        # raster callout detection can pick up AD/door labels as false windows.
+        points = _dedupe(colored_points + supplemental_colored_points, radius=14)
+    elif 10 <= len(colored_points) <= 16 and len(callout_points) < len(colored_points):
         # Some sheets rasterize AW/AS labels unevenly: a few callout bubbles
         # split into text-only components and miss the strict raster pass. In
         # that case, the colored facade groups are the more complete locator.
@@ -502,4 +567,9 @@ def detect_windows(page):
     else:
         points = colored_points or _dedupe(callout_points + text_points + rescue_points, radius=14)
 
-    return {WINDOW_KEY: _dedupe(points, radius=6)}
+    records = [
+        _window_record(point, segments)
+        for point in _dedupe(points, radius=6)
+    ]
+    records = [r for r in records if r["direction"] != "Not Included"]
+    return {WINDOW_KEY: _dedupe_window_records(records)}
