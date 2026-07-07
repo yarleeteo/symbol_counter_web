@@ -9,7 +9,7 @@ Current stack:
 - API URL: `https://2d3u6d1sfk.execute-api.ap-southeast-1.amazonaws.com`
 - Website URL: `http://symbol-counter-279098292997-ap-southeast-1-web.s3-website-ap-southeast-1.amazonaws.com`
 - ECR repository: `279098292997.dkr.ecr.ap-southeast-1.amazonaws.com/symbol-counter-lambda`
-- Current image tag: `20260703-2`
+- Current image tag: `20260705-window`
 
 ## Update deployment
 
